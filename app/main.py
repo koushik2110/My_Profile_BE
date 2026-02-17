@@ -7,9 +7,9 @@ app = FastAPI(title="GenAI RAG API")
 class Query(BaseModel):
     question: str
 
-@app.get("/")
+@app.get("/health")
 def health():
-    return {"status": "running"}
+    return {"status": "ok"}
 
 @app.post("/ask")
 def ask(query: Query):
