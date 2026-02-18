@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.rag import ask_rag
 
 app = FastAPI(title="GenAI RAG API")
+logger = logging.getLogger("rag")
 
 class Query(BaseModel):
     question: str
@@ -13,8 +16,15 @@ def health():
 
 @app.post("/ask")
 def ask(query: Query):
-    result = ask_rag(query.question)
-    return {
-        "answer": result["result"],
-        "sources": [doc.page_content[:200] for doc in result["source_documents"]]
-    }
+    try:
+        result = ask_rag(query.question)
+        return {
+            "answer": result["result"],
+            "sources": [doc.page_content[:200] for doc in result["source_documents"]],
+        }
+    except Exception:
+        logger.exception("Ask endpoint failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Ask failed. Check server logs for details.",
+        )
