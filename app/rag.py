@@ -1,4 +1,6 @@
 from functools import lru_cache
+import logging
+import time
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
@@ -6,6 +8,18 @@ from langchain_groq import ChatGroq
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from app.config import DB_URL, GROQ_API_KEY, SYSTEM_PROMPT
+
+logger = logging.getLogger("rag")
+
+
+def _require_env() -> None:
+    missing = []
+    if not DB_URL:
+        missing.append("SUPABASE_DB_URL")
+    if not GROQ_API_KEY:
+        missing.append("GROQ_API_KEY")
+    if missing:
+        raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
 
 
 def _build_prompt() -> PromptTemplate:
@@ -25,10 +39,14 @@ def _build_prompt() -> PromptTemplate:
 
 @lru_cache(maxsize=1)
 def _get_qa_chain() -> RetrievalQA:
+    _require_env()
+    start = time.time()
+    logger.info("Initializing embeddings")
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
+    logger.info("Initializing vector store")
     vectorstore = PGVector(
         connection_string=DB_URL,
         embedding_function=embeddings,
@@ -37,18 +55,22 @@ def _get_qa_chain() -> RetrievalQA:
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
+    logger.info("Initializing Groq LLM client")
     llm = ChatGroq(
         model_name="llama-3.3-70b-versatile",
         api_key=GROQ_API_KEY
     )
 
-    return RetrievalQA.from_chain_type(
+    chain = RetrievalQA.from_chain_type(
         llm=llm,
         retriever=retriever,
         chain_type="stuff",
         chain_type_kwargs={"prompt": _build_prompt()},
         return_source_documents=True
     )
+    elapsed_ms = int((time.time() - start) * 1000)
+    logger.info("RAG chain initialized in %d ms", elapsed_ms)
+    return chain
 
 def ask_rag(question: str):
     return _get_qa_chain()({"query": question})
