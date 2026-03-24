@@ -3,7 +3,7 @@ import time
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from app.rag import ask_rag
+from .rag import ask_rag
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="GenAI RAG API")
